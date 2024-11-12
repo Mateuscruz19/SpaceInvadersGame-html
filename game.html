@@ -1,0 +1,370 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <title>ODYSSEIA</title>
+    <style>
+      body {
+        margin: 0;
+        background: black;
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        font-family: Arial, sans-serif;
+        color: white;
+      }
+
+      #gameContainer {
+        position: relative;
+        width: 1400px;
+        height: 1447px;
+        background: url('invaders3.webp') no-repeat center center;
+        background-size: cover;
+        display: flex;
+        justify-content: center;
+        align-items: center;
+      }
+
+      #gameCanvas {
+        width: 960px;
+        height: 720px;
+        background-color: black;
+        border: 2px solid #4287f5;
+        box-shadow: inset 0 0 10px #4287f5;
+      }
+
+      #gui {
+        width: 800px;
+        padding: 10px;
+        display: flex;
+        justify-content: space-between;
+        background: rgba(0, 0, 0, 0.7);
+        border-radius: 10px;
+        margin-top: 10px;
+      }
+
+      .screen {
+        position: fixed;
+        top: 50%;
+        left: 50%;
+        transform: translate(-50%, -50%);
+        background: rgba(0, 0, 0, 0.9);
+        padding: 30px;
+        text-align: center;
+        display: none;
+        border: 2px solid #4287f5;
+        border-radius: 15px;
+        max-width: 600px;
+      }
+
+      .story {
+        font-size: 14px;
+        line-height: 1.6;
+        margin: 20px 0;
+        text-align: left;
+      }
+
+      button {
+        padding: 10px 20px;
+        margin: 10px;
+        cursor: pointer;
+        background: #4287f5;
+        border: none;
+        color: white;
+        font-size: 16px;
+        border-radius: 5px;
+        transition: all 0.3s;
+      }
+
+      button:hover {
+        background: #2563eb;
+        transform: scale(1.05);
+      }
+
+      #pauseScreen {
+        position: fixed;
+        top: 50%;
+        left: 50%;
+        transform: translate(-50%, -50%);
+        color: #4287f5;
+        font-size: 36px;
+        text-shadow: 0px 0px 10px #4287f5;
+        display: none;
+      }
+    </style>
+  </head>
+  <body>
+    <div id="gui">
+      <div>Cristais: <span id="score">0</span></div>
+      <div>Energia: <span id="lives">3</span></div>
+      <div>Recorde: <span id="highScore">0</span></div>
+    </div>
+
+    <div id="gameContainer">
+      <canvas id="gameCanvas" width="960" height="720"></canvas>
+    </div>
+
+    <div id="startScreen" class="screen">
+      <h1>ODYSSEIA</h1>
+      <div class="story">
+        <p>
+          Ano 2157. A Terra enfrenta uma grave crise energética. Nossa única
+          esperança são os raros Cristais Energéticos encontrados no cinturão de
+          asteroides entre Marte e Júpiter.
+        </p>
+        <p>
+          Como piloto da nave SS-Explorer, sua missão é coletar esses cristais
+          vitais enquanto desvia dos perigosos asteroides. Cada cristal coletado
+          fornece energia suficiente para abastecer uma cidade por um mês.
+        </p>
+        <p>A humanidade conta com você, Explorador!</p>
+      </div>
+      <p>Ajuste o zoom com Contrl+Scroll do mouse para melhor esperiencia em telas de tamanhos menores.</p>
+      <p>Use as teclas A e D para pilotar a nave, P para pausar</p>
+      <button onclick="startGame()">Iniciar Missão</button>
+    </div>
+
+    <div id="gameOverScreen" class="screen">
+      <h1>Missão Finalizada!</h1>
+      <p>Cristais coletados: <span id="finalScore">0</span></p>
+      <div class="story">
+        <p>
+          Sua contribuição para a Terra foi vital. Cada cristal coletado nos
+          aproxima mais da solução para a crise energética.
+        </p>
+      </div>
+      <button onclick="startGame()">Nova Missão</button>
+    </div>
+
+    <div id="pauseScreen">JOGO PAUSADO</div>
+
+    <script>
+      const naveImg = new Image();
+      naveImg.src = "nave.png";
+
+      const diamanteImg = new Image();
+      diamanteImg.src = "diamante.png";
+
+      const asteroideImg = new Image();
+      asteroideImg.src = "asteroide.png";
+
+      const canvas = document.getElementById("gameCanvas");
+      const ctx = canvas.getContext("2d");
+
+      // Música de fundo
+      const backgroundMusic = new Audio("star.wav");
+      backgroundMusic.loop = true;
+      backgroundMusic.volume = 0.5;
+
+      // Sons adicionais
+      const damageSound = new Audio("damage.mp3");
+      const pointsSound = new Audio("points.mp3");
+      const gameOverSound = new Audio("gameover.mp3");
+
+      // Estados do jogo
+      let gameState = "start";
+      let score = 0;
+      let lives = 3;
+      let highScore = localStorage.getItem("highScore") || 0;
+      let isPaused = false;
+
+      const player = {
+        x: canvas.width / 2,
+        y: canvas.height - 80,
+        width: 60,
+        height: 90,
+        speed: 5,
+      };
+
+      function explosion(x, y) {
+        ctx.fillStyle = "orange";
+        ctx.beginPath();
+        ctx.arc(x + player.width / 2, y + player.height / 2, 30, 0, Math.PI * 2);
+        ctx.fill();
+      }
+
+      function drawPlayer(x, y) {
+        ctx.drawImage(naveImg, x, y, player.width, player.height);
+      }
+
+      let crystals = [];
+      let asteroids = [];
+
+      const backgrounds = [
+        { img: createStarfield(0.2), y: 0, speed: 0.5 },
+        { img: createStarfield(0.5), y: 0, speed: 1 },
+        { img: createStarfield(1.0), y: 0, speed: 2 },
+      ];
+
+      function createStarfield(density) {
+        const offscreen = document.createElement("canvas");
+        offscreen.width = canvas.width;
+        offscreen.height = canvas.height;
+        const octx = offscreen.getContext("2d");
+
+        const stars = Math.floor((canvas.width * canvas.height * density) / 1000);
+        octx.fillStyle = "white";
+        for (let i = 0; i < stars; i++) {
+          octx.fillRect(
+            Math.random() * canvas.width,
+            Math.random() * canvas.height,
+            1,
+            1
+          );
+        }
+        return offscreen;
+      }
+
+      // Controles
+      const keys = {};
+      window.addEventListener("keydown", (e) => {
+        keys[e.key] = true;
+        if (e.key === "p" || e.key === "P") togglePause();
+      });
+      window.addEventListener("keyup", (e) => (keys[e.key] = false));
+
+      function togglePause() {
+        if (gameState === "playing") {
+          isPaused = !isPaused;
+          document.getElementById("pauseScreen").style.display = isPaused ? "block" : "none";
+          if (isPaused) backgroundMusic.pause();
+          else backgroundMusic.play();
+        }
+      }
+
+      function spawnCrystal() {
+        if (Math.random() < 0.02) {
+          crystals.push({
+            x: Math.random() * (canvas.width - 90),
+            y: -90,
+            width: 90,
+            height: 90,
+            speed: 2,
+          });
+        }
+      }
+
+      function spawnAsteroid() {
+        if (Math.random() < 0.01) {
+          asteroids.push({
+            x: Math.random() * (canvas.width - 40),
+            y: -40,
+            width: 40,
+            height: 40,
+            speed: 3,
+          });
+        }
+      }
+
+      function checkCollision(rect1, rect2) {
+        return (
+          rect1.x < rect2.x + rect2.width &&
+          rect1.x + rect1.width > rect2.x &&
+          rect1.y < rect2.y + rect2.height &&
+          rect1.y + rect1.height > rect2.y
+        );
+      }
+
+      function updateGame() {
+        if (isPaused) return;
+
+        if (keys["a"] || keys["A"]) player.x = Math.max(0, player.x - player.speed);
+        if (keys["d"] || keys["D"]) player.x = Math.min(canvas.width - player.width, player.x + player.speed);
+
+        backgrounds.forEach((bg) => {
+          bg.y = (bg.y + bg.speed) % canvas.height;
+        });
+
+        crystals.forEach((crystal, index) => {
+          crystal.y += crystal.speed;
+          if (checkCollision(player, crystal)) {
+            crystals.splice(index, 1);
+            score += 10;
+            pointsSound.play();
+            document.getElementById("score").textContent = score;
+          } else if (crystal.y > canvas.height) {
+            crystals.splice(index, 1);
+          }
+        });
+
+        asteroids.forEach((asteroid, index) => {
+          asteroid.y += asteroid.speed;
+          if (checkCollision(player, asteroid)) {
+            explosion(player.x, player.y);
+            asteroids.splice(index, 1);
+            lives--;
+            damageSound.play();
+            document.getElementById("lives").textContent = lives;
+            if (lives <= 0) {
+              gameOver();
+            }
+          } else if (asteroid.y > canvas.height) {
+            asteroids.splice(index, 1);
+          }
+        });
+
+        spawnCrystal();
+        spawnAsteroid();
+      }
+
+      function drawGame() {
+        ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+        backgrounds.forEach((bg) => {
+          ctx.drawImage(bg.img, 0, bg.y);
+          ctx.drawImage(bg.img, 0, bg.y - canvas.height);
+        });
+
+        drawPlayer(player.x, player.y);
+
+        crystals.forEach((crystal) => {
+          ctx.drawImage(diamanteImg, crystal.x, crystal.y, crystal.width, crystal.height);
+        });
+
+        asteroids.forEach((asteroid) => {
+          ctx.drawImage(asteroideImg, asteroid.x, asteroid.y, asteroid.width, asteroid.height);
+        });
+      }
+
+      function gameLoop() {
+        if (gameState === "playing") {
+          updateGame();
+          drawGame();
+          requestAnimationFrame(gameLoop);
+        }
+      }
+
+      function startGame() {
+        backgroundMusic.currentTime = 0;
+        backgroundMusic.play();
+        gameState = "playing";
+        score = 0;
+        lives = 3;
+        isPaused = false;
+        document.getElementById("score").textContent = score;
+        document.getElementById("lives").textContent = lives;
+        document.getElementById("startScreen").style.display = "none";
+        document.getElementById("gameOverScreen").style.display = "none";
+        player.x = canvas.width / 2;
+        crystals = [];
+        asteroids = [];
+        gameLoop();
+      }
+
+      function gameOver() {
+        gameState = "over";
+        backgroundMusic.pause();
+        gameOverSound.play();
+        document.getElementById("finalScore").textContent = score;
+        if (score > highScore) {
+          highScore = score;
+          localStorage.setItem("highScore", highScore);
+          document.getElementById("highScore").textContent = highScore;
+        }
+        document.getElementById("gameOverScreen").style.display = "block";
+      }
+
+      document.getElementById("highScore").textContent = highScore;
+      document.getElementById("startScreen").style.display = "block";
+    </script>
+  </body>
+</html>
