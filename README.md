@@ -6,7 +6,7 @@ Como piloto da nave SS-Explorer, sua missão é coletar esses cristais vitais en
 
 A humanidade conta com você, Explorador!
 
-Ajuste o zoom com Contrl+Scroll do mouse para melhor esperiencia em telas de tamanhos menores.
+Ajuste o zoom com Contrl+Scroll do mouse para melhor experiencia em telas de tamanhos menores.
 
 Use as teclas A e D para pilotar a nave, P para pausar
 
